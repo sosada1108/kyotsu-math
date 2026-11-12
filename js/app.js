@@ -335,7 +335,7 @@
         segButtons(modes, 'data-mode', state.mode, '出題方法') +
         body +
       '</section>' +
-      '<section class="card">' +
+      '<section class="card" id="history">' +
         '<div class="row-between"><h2 class="h2">これまでの記録</h2>' +
         '<button type="button" class="btn-text" id="clear-history">記録を全部消す</button></div>' +
         historyHtml() +
@@ -387,6 +387,12 @@
         if (p) startProblem(p, '問題を指定');
       });
     });
+    app.querySelectorAll('[data-review]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var r = loadHistory()[Number(b.getAttribute('data-review'))];
+        if (r) renderReview(r);
+      });
+    });
     document.getElementById('clear-history').addEventListener('click', function () {
       if (loadHistory().length === 0) return;
       if (window.confirm('この端末に保存された記録をすべて消します。元に戻せません。よろしいですか？')) {
@@ -396,26 +402,95 @@
     });
   }
 
+  function findProblem(id) {
+    return window.PROBLEMS.filter(function (x) { return x.id === id; })[0];
+  }
+
   function historyHtml() {
-    var list = loadHistory().slice().reverse();
-    if (list.length === 0) return '<p class="hint">まだ記録がありません。</p>';
-    var rows = list.map(function (r) {
+    var all = loadHistory();
+    if (all.length === 0) return '<p class="hint">まだ記録がありません。</p>';
+    var rows = all.slice().reverse().map(function (r, i) {
+      var idx = all.length - 1 - i;
       // 評価は保存済みの得点・時間から毎回計算する（基準を変えても過去の記録に反映される）
       var found = findField(r.fieldId);
       var tg = timeGrade(r.timeSec, found ? found.field.bonus : false);
       var sg = scoreGrade(r.score, r.maxScore);
+      // 問題名を押すと問題と解説を見られる（問題が見つからない古い記録は文字だけ）
+      var title = findProblem(r.problemId)
+        ? '<button type="button" class="link-btn" data-review="' + idx + '">' + escapeHtml(r.title) + '</button>'
+        : escapeHtml(r.title);
       return '<tr>' +
         '<td data-label="日時">' + escapeHtml(fmtDate(r.date)) + '</td>' +
         '<td data-label="分野">' + escapeHtml(r.subjectName + '・' + r.fieldName) + '</td>' +
-        '<td data-label="問題">' + escapeHtml(r.title) + '</td>' +
+        '<td data-label="問題">' + title + '</td>' +
         '<td data-label="得点" class="num">' + r.score + ' / ' + r.maxScore + ' ' + gradeBadge(sg, 'sm') + '</td>' +
         '<td data-label="時間" class="num">' + escapeHtml(fmtTime(r.timeSec)) + ' ' + gradeBadge(tg, 'sm') + '</td>' +
         '<td data-label="総合評価">' + gradeBadge(overallGrade(tg, sg)) + '</td>' +
         '</tr>';
     }).join('');
-    return '<div class="table-wrap"><table class="history">' +
+    return '<p class="hint">問題名を押すと、その問題と正解・解説を見られます。</p>' +
+      '<div class="table-wrap"><table class="history">' +
       '<thead><tr><th>日時</th><th>分野</th><th>問題</th><th>得点（評価）</th><th>時間（評価）</th><th>総合評価</th></tr></thead>' +
       '<tbody>' + rows + '</tbody></table></div>';
+  }
+
+  // ---------- 画面：記録から問題を見直す ----------
+  function renderReview(r) {
+    var p = findProblem(r.problemId);
+    if (!p) return;
+    var found = findField(p.field);
+    var tg = timeGrade(r.timeSec, found.field.bonus);
+    var sg = scoreGrade(r.score, r.maxScore);
+    var rows = p.answers.map(function (a) {
+      return '<tr>' +
+        '<td>' + escapeHtml(a.q) + '</td>' +
+        '<td class="blank-key" data-label="解答欄">' + blankKeyHtml(a.k) + '</td>' +
+        '<td class="ans" data-label="正解">' + answerValueHtml(a) + (a.note ? '<span class="ans-note">' + escapeHtml(a.note) + '</span>' : '') + '</td>' +
+        '<td class="num" data-label="配点">' + a.pts + '点</td>' +
+        '</tr>';
+    }).join('');
+    show(
+      '<section class="card">' +
+        '<p class="eyebrow">' + escapeHtml(found.subject.name + '　' + found.field.part + '　' + found.field.name) + '（配点 ' + p.points + '）</p>' +
+        '<h1 class="h1">' + escapeHtml(p.title) + '</h1>' +
+        '<p class="review-record">' + escapeHtml(fmtDate(r.date)) + ' の記録：' +
+          '得点 ' + r.score + ' / ' + r.maxScore + ' ' + gradeBadge(sg, 'sm') + '　' +
+          '時間 ' + escapeHtml(fmtTime(r.timeSec)) + ' ' + gradeBadge(tg, 'sm') + '　' +
+          '総合 ' + gradeBadge(overallGrade(tg, sg), 'sm') + '</p>' +
+        '<div class="actions">' +
+          '<button type="button" class="btn-primary" id="retry">この問題をもう一度解く</button>' +
+          '<button type="button" class="btn-ghost" id="back-history">記録に戻る</button>' +
+        '</div>' +
+      '</section>' +
+      '<section class="card problem">' +
+        '<h2 class="h2">問題</h2>' +
+        '<div class="problem-body">' + p.body + '</div>' +
+      '</section>' +
+      '<section class="card">' +
+        '<h2 class="h2">正解</h2>' +
+        '<div class="table-wrap"><table class="answers"><thead><tr><th>設問</th><th>解答欄</th><th>正解</th><th>配点</th></tr></thead>' +
+        '<tbody>' + rows + '</tbody></table></div>' +
+      '</section>' +
+      '<section class="card">' +
+        '<h2 class="h2">解説</h2>' +
+        '<div class="explanation">' + p.explanation + '</div>' +
+      '</section>' +
+      '<div class="actions">' +
+        '<button type="button" class="btn-primary" id="retry2">この問題をもう一度解く</button>' +
+        '<button type="button" class="btn-ghost" id="back-history2">記録に戻る</button>' +
+      '</div>'
+    );
+    renderMath(app);
+    function retry() { state.mode = 'pick'; startProblem(p, '記録から'); }
+    function back() {
+      renderHome();
+      var h = document.getElementById('history');
+      if (h && h.scrollIntoView) h.scrollIntoView({ block: 'start' });
+    }
+    document.getElementById('retry').addEventListener('click', retry);
+    document.getElementById('retry2').addEventListener('click', retry);
+    document.getElementById('back-history').addEventListener('click', back);
+    document.getElementById('back-history2').addEventListener('click', back);
   }
 
   // ---------- 画面：出題（スタート前） ----------

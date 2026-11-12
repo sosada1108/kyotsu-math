@@ -277,3 +277,11 @@ details.criteria-box .criteria { margin: 6px 0 0; }
   .grade-grid { grid-template-columns: 1fr 1fr; }
   .grade-item.overall { grid-column: 1 / -1; }
 }
+
+/* 記録から問題を見直す */
+.link-btn {
+  font: inherit; color: var(--accent); background: none; border: 0; padding: 0; cursor: pointer;
+  text-align: left; text-decoration: underline; text-underline-offset: 2px;
+}
+.link-btn:hover { filter: brightness(1.2); }
+.review-record { font-size: .9rem; color: var(--muted); margin: 4px 0 0; line-height: 2; }
